@@ -1943,6 +1943,9 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         for (const [key, value] of Object.entries(params)) {
           queryParams.set(key, String(value));
         }
+        if (excludedOriginalLanguages.length > 0) {
+          queryParams.set('excludedOriginalLanguages', excludedOriginalLanguages.join(','));
+        }
         if (config.apiKeys?.tmdb) queryParams.set('apikey', config.apiKeys.tmdb);
         if (auth.userUUID) queryParams.set('userUUID', auth.userUUID);
   

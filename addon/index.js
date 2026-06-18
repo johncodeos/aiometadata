@@ -65,6 +65,7 @@ const ADDON_VERSION = buildInfo.version;
 const sharp = require('sharp');
 const idMapper = require('./lib/id-mapper');
 const wikiMappings = require('./lib/wiki-mapper.js');
+const { filterByExcludedOriginalLanguages, normalizeOriginalLanguageCodes } = require('./utils/original-language-filters');
 
 // Normalize redirect URIs to always include a scheme
 const normalizeRedirectUri = (uri) => {
@@ -2205,12 +2206,17 @@ addon.get("/api/tmdb/discover/preview", async (req, res) => {
 
     // Pass through all query params except internal ones
     const params = {};
-    const skipKeys = new Set(['type', 'apikey', 'userUUID']);
+    const skipKeys = new Set(['type', 'apikey', 'userUUID', 'excludedOriginalLanguages']);
     for (const [key, value] of Object.entries(queryParams)) {
       if (!skipKeys.has(key) && value !== undefined && value !== '') {
         params[key] = value;
       }
     }
+    const excludedOriginalLanguages = normalizeOriginalLanguageCodes(
+      typeof req.query?.excludedOriginalLanguages === 'string'
+        ? req.query.excludedOriginalLanguages.split(',')
+        : req.query?.excludedOriginalLanguages
+    );
     const resolvedParams = resolveDynamicTmdbDiscoverParams(params, {
       timezone: typeof req.query?.timezone === 'string' ? req.query.timezone : undefined
     });
@@ -2220,7 +2226,9 @@ addon.get("/api/tmdb/discover/preview", async (req, res) => {
       ? await moviedb.discoverMovie(resolvedParams, config)
       : await moviedb.discoverTv(resolvedParams, config);
 
-    const results = (response?.results || []).map(item => ({
+    const filteredResults = filterByExcludedOriginalLanguages(response?.results || [], excludedOriginalLanguages);
+
+    const results = filteredResults.map(item => ({
       id: item.id,
       title: item.title || item.name,
       poster_path: item.poster_path,
