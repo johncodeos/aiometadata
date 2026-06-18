@@ -771,6 +771,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
   const [pendingExcludeGenreId, setPendingExcludeGenreId] = useState<string>('');
 
   const [originalLanguage, setOriginalLanguage] = useState('');
+  const [originalLanguages, setOriginalLanguages] = useState<string[]>([]);
+  const [pendingOriginalLanguage, setPendingOriginalLanguage] = useState('');
   const [excludedOriginalLanguages, setExcludedOriginalLanguages] = useState<string[]>(() => [...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
   const [pendingExcludedOriginalLanguage, setPendingExcludedOriginalLanguage] = useState('');
   const [originCountry, setOriginCountry] = useState('');
@@ -968,9 +970,20 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     [references]
   );
 
+  const availableOriginalLanguages = useMemo(
+    () => sortedLanguages.filter(languageItem => (
+      !originalLanguages.includes(languageItem.iso_639_1) &&
+      !excludedOriginalLanguages.includes(languageItem.iso_639_1)
+    )),
+    [excludedOriginalLanguages, originalLanguages, sortedLanguages]
+  );
+
   const availableExcludedOriginalLanguages = useMemo(
-    () => sortedLanguages.filter(languageItem => !excludedOriginalLanguages.includes(languageItem.iso_639_1)),
-    [excludedOriginalLanguages, sortedLanguages]
+    () => sortedLanguages.filter(languageItem => (
+      !excludedOriginalLanguages.includes(languageItem.iso_639_1) &&
+      !originalLanguages.includes(languageItem.iso_639_1)
+    )),
+    [excludedOriginalLanguages, originalLanguages, sortedLanguages]
   );
 
   const sortedCountries = useMemo(
@@ -1045,6 +1058,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     excludeGenres,
     genreJoinMode,
     originalLanguage,
+    originalLanguages,
     originCountry,
     releaseRegion,
     certificationCountry,
@@ -1165,6 +1179,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     setPendingExcludeGenreId('');
 
     setOriginalLanguage('');
+    setOriginalLanguages([]);
+    setPendingOriginalLanguage('');
     setExcludedOriginalLanguages([...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
     setPendingExcludedOriginalLanguage('');
     setOriginCountry('');
@@ -1299,6 +1315,13 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.excludeGenres) setExcludeGenres(fs.excludeGenres);
     if (fs.genreJoinMode) setGenreJoinMode(fs.genreJoinMode);
     if (fs.originalLanguage) setOriginalLanguage(fs.originalLanguage);
+    if (Array.isArray(fs.originalLanguages)) {
+      setOriginalLanguages(fs.originalLanguages);
+    } else if (fs.originalLanguage) {
+      setOriginalLanguages([fs.originalLanguage]);
+    } else {
+      setOriginalLanguages([]);
+    }
     const storedExcludedLanguages = editingCatalog.metadata?.discover?.excludedOriginalLanguages;
     if (Array.isArray(fs.excludedOriginalLanguages)) {
       setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
@@ -1446,6 +1469,13 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.voteAverageRange) setVoteAverageRange(fs.voteAverageRange);
     if (fs.runtimeRange) setRuntimeRange(fs.runtimeRange);
     if (fs.originalLanguage) setOriginalLanguage(fs.originalLanguage);
+    if (Array.isArray(fs.originalLanguages)) {
+      setOriginalLanguages(fs.originalLanguages);
+    } else if (fs.originalLanguage) {
+      setOriginalLanguages([fs.originalLanguage]);
+    } else {
+      setOriginalLanguages([]);
+    }
     if (Array.isArray(fs.excludedOriginalLanguages)) setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
     if (fs.originCountry) setOriginCountry(fs.originCountry);
     if (fs.primaryReleaseFrom) setPrimaryReleaseFrom(fs.primaryReleaseFrom);
@@ -2226,8 +2256,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
       params.without_genres = joinSelectionValues(excludeGenres, genreJoinMode);
     }
 
-    if (originalLanguage) {
-      params.with_original_language = originalLanguage;
+    if (originalLanguages.length > 0) {
+      params.with_original_language = originalLanguages.join('|');
     }
     if (originCountry) {
       params.with_origin_country = originCountry;
@@ -2332,6 +2362,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         excludeGenres,
         genreJoinMode,
         originalLanguage,
+        originalLanguages,
         originCountry,
         certificationCountry,
         certificationValue,
@@ -2514,6 +2545,17 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     return `${languageItem?.english_name || languageItem?.name || code} (${code})`;
   };
 
+  const handleAddOriginalLanguage = () => {
+    if (!pendingOriginalLanguage) return;
+    setOriginalLanguages(prev => (
+      prev.includes(pendingOriginalLanguage)
+        ? prev
+        : [...prev, pendingOriginalLanguage]
+    ));
+    setExcludedOriginalLanguages(prev => prev.filter(item => item !== pendingOriginalLanguage));
+    setPendingOriginalLanguage('');
+  };
+
   const handleAddExcludedOriginalLanguage = () => {
     if (!pendingExcludedOriginalLanguage) return;
     setExcludedOriginalLanguages(prev => (
@@ -2521,6 +2563,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         ? prev
         : [...prev, pendingExcludedOriginalLanguage]
     ));
+    setOriginalLanguages(prev => prev.filter(item => item !== pendingExcludedOriginalLanguage));
     setPendingExcludedOriginalLanguage('');
   };
 
@@ -3839,22 +3882,73 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
                           </Select>
                         </div>
                       )}
-                      <div className="space-y-2">
-                        <Label>Original Language</Label>
-                        <Select value={originalLanguage || NONE_VALUE} onValueChange={(value) => setOriginalLanguage(value === NONE_VALUE ? '' : value)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE_VALUE}>Any</SelectItem>
-                            {sortedLanguages.map(languageItem => (
-                              <SelectItem key={languageItem.iso_639_1} value={languageItem.iso_639_1}>
-                                {(languageItem.english_name || languageItem.name || languageItem.iso_639_1)} ({languageItem.iso_639_1})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {discoverSource === 'tmdb' ? (
+                        <div className="space-y-2">
+                          <Label>Original Language</Label>
+                          <div className="flex gap-2">
+                            <Select
+                              value={pendingOriginalLanguage || NONE_VALUE}
+                              onValueChange={(value) => setPendingOriginalLanguage(value === NONE_VALUE ? '' : value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NONE_VALUE}>Select language</SelectItem>
+                                {availableOriginalLanguages.map(languageItem => (
+                                  <SelectItem key={languageItem.iso_639_1} value={languageItem.iso_639_1}>
+                                    {(languageItem.english_name || languageItem.name || languageItem.iso_639_1)} ({languageItem.iso_639_1})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleAddOriginalLanguage}
+                              disabled={!pendingOriginalLanguage}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                          {originalLanguages.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {originalLanguages.map(code => (
+                                <Badge key={code} variant="secondary" className="gap-1 pl-2 pr-1 py-1">
+                                  <span className="max-w-[180px] truncate">{getLanguageLabel(code)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOriginalLanguages(prev => prev.filter(item => item !== code))}
+                                    className="rounded-sm p-0.5 hover:bg-background/50"
+                                    aria-label={`Remove ${getLanguageLabel(code)}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Any</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label>Original Language</Label>
+                          <Select value={originalLanguage || NONE_VALUE} onValueChange={(value) => setOriginalLanguage(value === NONE_VALUE ? '' : value)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE_VALUE}>Any</SelectItem>
+                              {sortedLanguages.map(languageItem => (
+                                <SelectItem key={languageItem.iso_639_1} value={languageItem.iso_639_1}>
+                                  {(languageItem.english_name || languageItem.name || languageItem.iso_639_1)} ({languageItem.iso_639_1})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       {discoverSource === 'tmdb' && (
                         <div className="space-y-2">
                           <Label>Exclude Original Languages</Label>
