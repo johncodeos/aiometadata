@@ -55,6 +55,20 @@ type RelativeDatePresetKey =
   | 'last_5_years'
   | 'last_10_years';
 
+const DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES = [
+  'hi',
+  'bn',
+  'ta',
+  'te',
+  'ml',
+  'kn',
+  'mr',
+  'pa',
+  'gu',
+  'ur',
+  'ne',
+];
+
 interface TmdbGenre {
   id: number;
   name: string;
@@ -757,7 +771,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
   const [pendingExcludeGenreId, setPendingExcludeGenreId] = useState<string>('');
 
   const [originalLanguage, setOriginalLanguage] = useState('');
-  const [excludedOriginalLanguages, setExcludedOriginalLanguages] = useState<string[]>([]);
+  const [excludedOriginalLanguages, setExcludedOriginalLanguages] = useState<string[]>(() => [...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
   const [pendingExcludedOriginalLanguage, setPendingExcludedOriginalLanguage] = useState('');
   const [originCountry, setOriginCountry] = useState('');
   const [releaseRegion, setReleaseRegion] = useState('');
@@ -1151,7 +1165,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     setPendingExcludeGenreId('');
 
     setOriginalLanguage('');
-    setExcludedOriginalLanguages([]);
+    setExcludedOriginalLanguages([...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
     setPendingExcludedOriginalLanguage('');
     setOriginCountry('');
     setReleaseRegion('');
@@ -1267,7 +1281,11 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     resetState();
 
     const fs = editingCatalog.metadata?.discover?.formState;
-    if (!fs) return;
+    if (!fs) {
+      const storedExcludedLanguages = editingCatalog.metadata?.discover?.excludedOriginalLanguages;
+      setExcludedOriginalLanguages(Array.isArray(storedExcludedLanguages) ? storedExcludedLanguages : []);
+      return;
+    }
   
     // Shared
     if (fs.catalogName) setCatalogName(fs.catalogName);
@@ -1281,7 +1299,14 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.excludeGenres) setExcludeGenres(fs.excludeGenres);
     if (fs.genreJoinMode) setGenreJoinMode(fs.genreJoinMode);
     if (fs.originalLanguage) setOriginalLanguage(fs.originalLanguage);
-    if (Array.isArray(fs.excludedOriginalLanguages)) setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
+    const storedExcludedLanguages = editingCatalog.metadata?.discover?.excludedOriginalLanguages;
+    if (Array.isArray(fs.excludedOriginalLanguages)) {
+      setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
+    } else if (Array.isArray(storedExcludedLanguages)) {
+      setExcludedOriginalLanguages(storedExcludedLanguages);
+    } else {
+      setExcludedOriginalLanguages([]);
+    }
     if (fs.originCountry) setOriginCountry(fs.originCountry);
     if (fs.certificationCountry) setCertificationCountry(fs.certificationCountry);
     if (fs.certificationValue) setCertificationValue(fs.certificationValue);
@@ -3875,9 +3900,6 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
                           ) : (
                             <p className="text-xs text-muted-foreground">No original languages excluded.</p>
                           )}
-                          <p className="text-xs text-muted-foreground">
-                            Hide TMDB results whose original language matches any selected language.
-                          </p>
                         </div>
                       )}
                       <div className="space-y-2">
