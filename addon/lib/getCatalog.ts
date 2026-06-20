@@ -963,6 +963,57 @@ async function getTmdbAndMdbListCatalog(type: string, id: string, genre: string,
     const rawParams = storedParams && typeof storedParams === 'object' && !Array.isArray(storedParams)
       ? { ...storedParams }
       : {};
+
+    // Handle TMDB Trending mode from Discover Builder
+    if (discoverMetadata.mode === 'trending') {
+      const timeWindow = discoverMetadata.timeWindow || 'day';
+      const tmdbMediaType = isMovieCatalog ? 'movie' : 'tv';
+      const discoverPage = typeof page === 'number' ? page : parseInt(String(page), 10) || 1;
+
+      logger.info(`[TMDB Trending Discover] Fetching trending ${tmdbMediaType} (${timeWindow}), page ${discoverPage}`);
+
+      try {
+        const response = await moviedb.trending({ media_type: tmdbMediaType, time_window: timeWindow, page: discoverPage }, config);
+
+        if (!response?.results || !Array.isArray(response.results) || response.results.length === 0) {
+          logger.info(`[TMDB Trending Discover] No results for ${id}`);
+          return [];
+        }
+
+        const filteredResults = filterByExcludedOriginalLanguages(
+          response.results,
+          discoverMetadata?.excludedOriginalLanguages
+        );
+
+        if (filteredResults.length === 0) {
+          logger.info(`[TMDB Trending Discover] No results for ${id} after original language exclusions`);
+          return [];
+        }
+
+        const metaType = isMovieCatalog ? 'movie' : 'series';
+        const metas = await mapWithLimit(filteredResults, async (item: any) => {
+          const stremioId = `tmdb:${item.id}`;
+          try {
+            const result = await cacheWrapMetaSmart(userUUID, stremioId, async () => {
+              return await getMeta(metaType, language, stremioId, config, userUUID, includeVideos);
+            }, undefined, { enableErrorCaching: true, maxRetries: 2, config }, metaType as any, includeVideos);
+            if (result && result.meta) {
+              return result.meta;
+            }
+          } catch (error: any) {
+            logger.warn(`[TMDB Trending Discover] Failed to get meta for ${stremioId}: ${error.message}`);
+          }
+          return null;
+        });
+
+        const validMetas = metas.filter(meta => meta !== null);
+        logger.success(`[TMDB Trending Discover] Processed ${validMetas.length} items for ${id}`);
+        return validMetas;
+      } catch (error: any) {
+        logger.error(`[TMDB Trending Discover] Error fetching catalog ${id}: ${error.message}`);
+        return [];
+      }
+    }
     if (genre && genre.toLowerCase() !== 'none') {
       const genreList = await getGenreList('tmdb', language, type === 'movie' ? 'movie' : 'series', config);
       const genreId = genreList.find((g: any) => g.name.toLowerCase() === genre.toLowerCase())?.id;

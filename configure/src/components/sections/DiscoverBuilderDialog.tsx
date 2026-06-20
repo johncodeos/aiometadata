@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { AlertCircle, AlertTriangle, CircleHelp, Loader2, Search, Trash2, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiCache } from '@/utils/apiCache';
@@ -746,6 +747,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
   const [discoverSource, setDiscoverSource] = useState<DiscoverSource>('tmdb');
   const [catalogName, setCatalogName] = useState('');
   const [catalogType, setCatalogType] = useState<CatalogMediaType>('movie');
+  const [tmdbCatalogMode, setTmdbCatalogMode] = useState<'discover' | 'trending'>('discover');
+  const [trendingTimeWindow, setTrendingTimeWindow] = useState<'day' | 'week'>('day');
   const [simklMediaType, setSimklMediaType] = useState<SimklDiscoverMediaType>('movies');
   const [sortBy, setSortBy] = useState('popularity.desc');
   const [tvdbSortDirection, setTvdbSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -771,10 +774,14 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
   const [pendingExcludeGenreId, setPendingExcludeGenreId] = useState<string>('');
 
   const [originalLanguage, setOriginalLanguage] = useState('');
-  const [originalLanguages, setOriginalLanguages] = useState<string[]>([]);
-  const [pendingOriginalLanguage, setPendingOriginalLanguage] = useState('');
-  const [excludedOriginalLanguages, setExcludedOriginalLanguages] = useState<string[]>(() => [...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
-  const [pendingExcludedOriginalLanguage, setPendingExcludedOriginalLanguage] = useState('');
+  const [languageRoles, setLanguageRoles] = useState<Record<string, 'include' | 'exclude'>>(() => {
+    const initial: Record<string, 'include' | 'exclude'> = {};
+    for (const code of DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES) {
+      initial[code] = 'exclude';
+    }
+    return initial;
+  });
+  const [languageSearch, setLanguageSearch] = useState('');
   const [originCountry, setOriginCountry] = useState('');
   const [releaseRegion, setReleaseRegion] = useState('');
   const [certificationCountry, setCertificationCountry] = useState('');
@@ -970,21 +977,15 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     [references]
   );
 
-  const availableOriginalLanguages = useMemo(
-    () => sortedLanguages.filter(languageItem => (
-      !originalLanguages.includes(languageItem.iso_639_1) &&
-      !excludedOriginalLanguages.includes(languageItem.iso_639_1)
-    )),
-    [excludedOriginalLanguages, originalLanguages, sortedLanguages]
-  );
-
-  const availableExcludedOriginalLanguages = useMemo(
-    () => sortedLanguages.filter(languageItem => (
-      !excludedOriginalLanguages.includes(languageItem.iso_639_1) &&
-      !originalLanguages.includes(languageItem.iso_639_1)
-    )),
-    [excludedOriginalLanguages, originalLanguages, sortedLanguages]
-  );
+  const filteredLanguages = useMemo(() => {
+    const search = languageSearch.toLowerCase().trim();
+    if (!search) return sortedLanguages;
+    return sortedLanguages.filter(lang =>
+      lang.english_name?.toLowerCase().includes(search) ||
+      lang.name?.toLowerCase().includes(search) ||
+      lang.iso_639_1.toLowerCase().includes(search)
+    );
+  }, [sortedLanguages, languageSearch]);
 
   const sortedCountries = useMemo(
     () => (references?.countries || []).slice().sort((a, b) => (a.english_name || a.iso_3166_1).localeCompare(b.english_name || b.iso_3166_1)),
@@ -1058,7 +1059,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     excludeGenres,
     genreJoinMode,
     originalLanguage,
-    originalLanguages,
+    languageRoles,
     originCountry,
     releaseRegion,
     certificationCountry,
@@ -1156,6 +1157,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     setDiscoverSource('tmdb');
     setCatalogName('');
     setCatalogType('movie');
+    setTmdbCatalogMode('discover');
+    setTrendingTimeWindow('day');
     setSimklMediaType('movies');
     setSortBy('popularity.desc');
     setTvdbSortDirection('desc');
@@ -1179,10 +1182,12 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     setPendingExcludeGenreId('');
 
     setOriginalLanguage('');
-    setOriginalLanguages([]);
-    setPendingOriginalLanguage('');
-    setExcludedOriginalLanguages([...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES]);
-    setPendingExcludedOriginalLanguage('');
+    const initial: Record<string, 'include' | 'exclude'> = {};
+    for (const code of DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES) {
+      initial[code] = 'exclude';
+    }
+    setLanguageRoles(initial);
+    setLanguageSearch('');
     setOriginCountry('');
     setReleaseRegion('');
     setCertificationCountry('');
@@ -1299,7 +1304,13 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     const fs = editingCatalog.metadata?.discover?.formState;
     if (!fs) {
       const storedExcludedLanguages = editingCatalog.metadata?.discover?.excludedOriginalLanguages;
-      setExcludedOriginalLanguages(Array.isArray(storedExcludedLanguages) ? storedExcludedLanguages : []);
+      if (Array.isArray(storedExcludedLanguages)) {
+        const roles: Record<string, 'include' | 'exclude'> = {};
+        for (const code of storedExcludedLanguages) {
+          roles[code] = 'exclude';
+        }
+        setLanguageRoles(roles);
+      }
       return;
     }
   
@@ -1315,20 +1326,27 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.excludeGenres) setExcludeGenres(fs.excludeGenres);
     if (fs.genreJoinMode) setGenreJoinMode(fs.genreJoinMode);
     if (fs.originalLanguage) setOriginalLanguage(fs.originalLanguage);
-    if (Array.isArray(fs.originalLanguages)) {
-      setOriginalLanguages(fs.originalLanguages);
-    } else if (fs.originalLanguage) {
-      setOriginalLanguages([fs.originalLanguage]);
+    // Support both new format (languageRoles) and legacy format
+    if (fs.languageRoles && typeof fs.languageRoles === 'object') {
+      setLanguageRoles(fs.languageRoles);
     } else {
-      setOriginalLanguages([]);
-    }
-    const storedExcludedLanguages = editingCatalog.metadata?.discover?.excludedOriginalLanguages;
-    if (Array.isArray(fs.excludedOriginalLanguages)) {
-      setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
-    } else if (Array.isArray(storedExcludedLanguages)) {
-      setExcludedOriginalLanguages(storedExcludedLanguages);
-    } else {
-      setExcludedOriginalLanguages([]);
+      const roles: Record<string, 'include' | 'exclude'> = {};
+      const includeLangs = Array.isArray(fs.originalLanguages)
+        ? fs.originalLanguages
+        : fs.originalLanguage ? [fs.originalLanguage] : [];
+      const excludeLangs = Array.isArray(fs.excludedOriginalLanguages)
+        ? fs.excludedOriginalLanguages
+        : Array.isArray(editingCatalog?.metadata?.discover?.excludedOriginalLanguages)
+          ? editingCatalog.metadata.discover.excludedOriginalLanguages
+          : [...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES];
+
+      for (const code of includeLangs) {
+        roles[code] = 'include';
+      }
+      for (const code of excludeLangs) {
+        if (!roles[code]) roles[code] = 'exclude';
+      }
+      setLanguageRoles(roles);
     }
     if (fs.originCountry) setOriginCountry(fs.originCountry);
     if (fs.certificationCountry) setCertificationCountry(fs.certificationCountry);
@@ -1336,6 +1354,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.certificationMode) setCertificationMode(fs.certificationMode);
   
     // TMDB-only
+    if (fs.tmdbCatalogMode) setTmdbCatalogMode(fs.tmdbCatalogMode);
+    if (fs.trendingTimeWindow) setTrendingTimeWindow(fs.trendingTimeWindow);
     if (typeof fs.includeAdult === 'boolean') setIncludeAdult(fs.includeAdult);
     if (typeof fs.releasedOnly === 'boolean') setReleasedOnly(fs.releasedOnly);
     if (fs.tmdbTvStatuses) setTmdbTvStatuses(fs.tmdbTvStatuses);
@@ -1461,6 +1481,8 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     setCatalogType(customizeTemplate.catalogType as CatalogMediaType);
   
     // TMDB fields
+    if (fs.tmdbCatalogMode) setTmdbCatalogMode(fs.tmdbCatalogMode);
+    if (fs.trendingTimeWindow) setTrendingTimeWindow(fs.trendingTimeWindow);
     if (fs.sortBy) setSortBy(fs.sortBy);
     if (typeof fs.includeAdult === 'boolean') setIncludeAdult(fs.includeAdult);
     if (typeof fs.releasedOnly === 'boolean') setReleasedOnly(fs.releasedOnly);
@@ -1469,14 +1491,25 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     if (fs.voteAverageRange) setVoteAverageRange(fs.voteAverageRange);
     if (fs.runtimeRange) setRuntimeRange(fs.runtimeRange);
     if (fs.originalLanguage) setOriginalLanguage(fs.originalLanguage);
-    if (Array.isArray(fs.originalLanguages)) {
-      setOriginalLanguages(fs.originalLanguages);
-    } else if (fs.originalLanguage) {
-      setOriginalLanguages([fs.originalLanguage]);
+    if (fs.languageRoles && typeof fs.languageRoles === 'object') {
+      setLanguageRoles(fs.languageRoles);
     } else {
-      setOriginalLanguages([]);
+      const roles: Record<string, 'include' | 'exclude'> = {};
+      const includeLangs = Array.isArray(fs.originalLanguages)
+        ? fs.originalLanguages
+        : fs.originalLanguage ? [fs.originalLanguage] : [];
+      const excludeLangs = Array.isArray(fs.excludedOriginalLanguages)
+        ? fs.excludedOriginalLanguages
+        : [...DEFAULT_EXCLUDED_ORIGINAL_LANGUAGES];
+
+      for (const code of includeLangs) {
+        roles[code] = 'include';
+      }
+      for (const code of excludeLangs) {
+        if (!roles[code]) roles[code] = 'exclude';
+      }
+      setLanguageRoles(roles);
     }
-    if (Array.isArray(fs.excludedOriginalLanguages)) setExcludedOriginalLanguages(fs.excludedOriginalLanguages);
     if (fs.originCountry) setOriginCountry(fs.originCountry);
     if (fs.primaryReleaseFrom) setPrimaryReleaseFrom(fs.primaryReleaseFrom);
     if (fs.primaryReleaseTo) setPrimaryReleaseTo(fs.primaryReleaseTo);
@@ -1970,11 +2003,19 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         const mediaType = catalogType === 'movie' ? 'movie' : 'tv';
         const queryParams = new URLSearchParams();
         queryParams.set('type', mediaType);
-        for (const [key, value] of Object.entries(params)) {
-          queryParams.set(key, String(value));
+        if (tmdbCatalogMode === 'trending') {
+          queryParams.set('mode', 'trending');
+          queryParams.set('timeWindow', trendingTimeWindow);
+        } else {
+          for (const [key, value] of Object.entries(params)) {
+            queryParams.set(key, String(value));
+          }
         }
-        if (excludedOriginalLanguages.length > 0) {
-          queryParams.set('excludedOriginalLanguages', excludedOriginalLanguages.join(','));
+        const previewExcludedLangs = Object.entries(languageRoles)
+          .filter(([_, role]) => role === 'exclude')
+          .map(([code]) => code);
+        if (previewExcludedLangs.length > 0) {
+          queryParams.set('excludedOriginalLanguages', previewExcludedLangs.join(','));
         }
         if (config.apiKeys?.tmdb) queryParams.set('apikey', config.apiKeys.tmdb);
         if (auth.userUUID) queryParams.set('userUUID', auth.userUUID);
@@ -2256,8 +2297,11 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
       params.without_genres = joinSelectionValues(excludeGenres, genreJoinMode);
     }
 
-    if (originalLanguages.length > 0) {
-      params.with_original_language = originalLanguages.join('|');
+    const includeLangs = Object.entries(languageRoles)
+      .filter(([_, role]) => role === 'include')
+      .map(([code]) => code);
+    if (includeLangs.length > 0) {
+      params.with_original_language = includeLangs.join('|');
     }
     if (originCountry) {
       params.with_origin_country = originCountry;
@@ -2357,12 +2401,20 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
   
     // TMDB / TVDB shared
     if (discoverSource === 'tmdb' || discoverSource === 'tvdb') {
+      const includeLangs = Object.entries(languageRoles)
+        .filter(([_, role]) => role === 'include')
+        .map(([code]) => code);
+      const excludeLangs = Object.entries(languageRoles)
+        .filter(([_, role]) => role === 'exclude')
+        .map(([code]) => code);
+
       Object.assign(state, {
         includeGenres,
         excludeGenres,
         genreJoinMode,
-        originalLanguage,
-        originalLanguages,
+        originalLanguage: includeLangs[0] || originalLanguage,
+        originalLanguages: includeLangs,
+        languageRoles,
         originCountry,
         certificationCountry,
         certificationValue,
@@ -2372,11 +2424,17 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
 
     // TMDB-only
     if (discoverSource === 'tmdb') {
+      const excludeLangs = Object.entries(languageRoles)
+        .filter(([_, role]) => role === 'exclude')
+        .map(([code]) => code);
+
       Object.assign(state, {
+        tmdbCatalogMode,
+        trendingTimeWindow,
         includeAdult,
         releasedOnly,
         tmdbTvStatuses,
-        excludedOriginalLanguages,
+        excludedOriginalLanguages: excludeLangs,
         selectedPeople,
         peopleJoinMode,
         withCompanies,
@@ -2545,26 +2603,23 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
     return `${languageItem?.english_name || languageItem?.name || code} (${code})`;
   };
 
-  const handleAddOriginalLanguage = () => {
-    if (!pendingOriginalLanguage) return;
-    setOriginalLanguages(prev => (
-      prev.includes(pendingOriginalLanguage)
-        ? prev
-        : [...prev, pendingOriginalLanguage]
-    ));
-    setExcludedOriginalLanguages(prev => prev.filter(item => item !== pendingOriginalLanguage));
-    setPendingOriginalLanguage('');
+  const handleToggleLanguageRole = (code: string) => {
+    setLanguageRoles(prev => {
+      const current = prev[code];
+      const next = { ...prev };
+      if (!current) {
+        next[code] = 'include';
+      } else if (current === 'include') {
+        next[code] = 'exclude';
+      } else {
+        delete next[code];
+      }
+      return next;
+    });
   };
 
-  const handleAddExcludedOriginalLanguage = () => {
-    if (!pendingExcludedOriginalLanguage) return;
-    setExcludedOriginalLanguages(prev => (
-      prev.includes(pendingExcludedOriginalLanguage)
-        ? prev
-        : [...prev, pendingExcludedOriginalLanguage]
-    ));
-    setOriginalLanguages(prev => prev.filter(item => item !== pendingExcludedOriginalLanguage));
-    setPendingExcludedOriginalLanguage('');
+  const handleClearAllLanguages = () => {
+    setLanguageRoles({});
   };
 
   const handleToggleProvider = (provider: TmdbProvider) => {
@@ -2675,16 +2730,25 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         }),
         ...(displayType && { displayType }),
         metadata: {
-          description: `${sourceLabel} Discover (${discoverMediaType})`,
+          description: discoverSource === 'tmdb' && tmdbCatalogMode === 'trending'
+            ? `TMDB Trending ${trendingTimeWindow === 'day' ? '(Day)' : '(Week)'} (${discoverMediaType})`
+            : `${sourceLabel} Discover (${discoverMediaType})`,
           url: discoverUrl,
           discover: {
             version: 2,
             source: discoverSource,
             mediaType: discoverMediaType as 'movie' | 'tv' | 'series' | 'anime',
             params: persistedParams,
-            ...(discoverSource === 'tmdb' && excludedOriginalLanguages.length > 0 && {
-              excludedOriginalLanguages,
+            ...(discoverSource === 'tmdb' && tmdbCatalogMode === 'trending' && {
+              mode: 'trending',
+              timeWindow: trendingTimeWindow,
             }),
+            ...(discoverSource === 'tmdb' && (() => {
+              const excludeLangs = Object.entries(languageRoles)
+                .filter(([_, role]) => role === 'exclude')
+                .map(([code]) => code);
+              return excludeLangs.length > 0 && { excludedOriginalLanguages: excludeLangs };
+            })()),
             formState,
           }
         }
@@ -2886,21 +2950,51 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
                       </Select>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>Sort By</Label>
-                    <Select value={sortBy} onValueChange={setSortBy}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sortOptions.map(option => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {discoverSource === 'tmdb' && (
+                    <div className="space-y-2">
+                      <Label>Mode</Label>
+                      <Select value={tmdbCatalogMode} onValueChange={(value: 'discover' | 'trending') => setTmdbCatalogMode(value)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="discover">Discover (Filters)</SelectItem>
+                          <SelectItem value="trending">Trending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {discoverSource === 'tmdb' && tmdbCatalogMode === 'trending' && (
+                    <div className="space-y-2">
+                      <Label>Time Window</Label>
+                      <Select value={trendingTimeWindow} onValueChange={(value: 'day' | 'week') => setTrendingTimeWindow(value)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="day">Day</SelectItem>
+                          <SelectItem value="week">Week</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {!(discoverSource === 'tmdb' && tmdbCatalogMode === 'trending') && (
+                    <div className="space-y-2">
+                      <Label>Sort By</Label>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sortOptions.map(option => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   {discoverSource === 'tvdb' && catalogType === 'series' && (
                     <div className="space-y-2">
                       <Label>Sort Direction</Label>
@@ -3883,52 +3977,68 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
                         </div>
                       )}
                       {discoverSource === 'tmdb' ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <Label>Original Language</Label>
-                          <div className="flex gap-2">
-                            <Select
-                              value={pendingOriginalLanguage || NONE_VALUE}
-                              onValueChange={(value) => setPendingOriginalLanguage(value === NONE_VALUE ? '' : value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={NONE_VALUE}>Select language</SelectItem>
-                                {availableOriginalLanguages.map(languageItem => (
-                                  <SelectItem key={languageItem.iso_639_1} value={languageItem.iso_639_1}>
-                                    {(languageItem.english_name || languageItem.name || languageItem.iso_639_1)} ({languageItem.iso_639_1})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleAddOriginalLanguage}
-                              disabled={!pendingOriginalLanguage}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                          {originalLanguages.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {originalLanguages.map(code => (
-                                <Badge key={code} variant="secondary" className="gap-1 pl-2 pr-1 py-1">
-                                  <span className="max-w-[180px] truncate">{getLanguageLabel(code)}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setOriginalLanguages(prev => prev.filter(item => item !== code))}
-                                    className="rounded-sm p-0.5 hover:bg-background/50"
-                                    aria-label={`Remove ${getLanguageLabel(code)}`}
+                          <Input
+                            placeholder="Search languages..."
+                            value={languageSearch}
+                            onChange={(e) => setLanguageSearch(e.target.value)}
+                          />
+                          <div className="max-h-[200px] overflow-y-auto rounded-lg border border-white/[0.06] bg-muted/30 p-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {filteredLanguages.map(lang => {
+                                const role = languageRoles[lang.iso_639_1];
+                                return (
+                                  <Badge
+                                    key={lang.iso_639_1}
+                                    variant="outline"
+                                    className={cn(
+                                      'cursor-pointer select-none transition-colors',
+                                      role === 'include' && 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30',
+                                      role === 'exclude' && 'bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30',
+                                      !role && 'hover:bg-muted'
+                                    )}
+                                    onClick={() => handleToggleLanguageRole(lang.iso_639_1)}
                                   >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              ))}
+                                    {lang.english_name || lang.name || lang.iso_639_1}
+                                  </Badge>
+                                );
+                              })}
                             </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">Any</p>
+                          </div>
+                          {Object.keys(languageRoles).length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                {Object.entries(languageRoles).map(([code, role]) => (
+                                  <Badge
+                                    key={code}
+                                    variant="secondary"
+                                    className={cn(
+                                      'gap-1 pl-2 pr-1 py-1',
+                                      role === 'include' && 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+                                      role === 'exclude' && 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                    )}
+                                  >
+                                    <span className="max-w-[180px] truncate">{role === 'include' ? '✚ ' : '✖ '}{getLanguageLabel(code)}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleLanguageRole(code)}
+                                      className="rounded-sm p-0.5 hover:bg-background/50"
+                                      aria-label={`Remove ${getLanguageLabel(code)}`}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                                onClick={handleClearAllLanguages}
+                              >
+                                Clear all
+                              </button>
+                            </div>
                           )}
                         </div>
                       ) : (
@@ -3947,56 +4057,6 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
-                      )}
-                      {discoverSource === 'tmdb' && (
-                        <div className="space-y-2">
-                          <Label>Exclude Original Languages</Label>
-                          <div className="flex gap-2">
-                            <Select
-                              value={pendingExcludedOriginalLanguage || NONE_VALUE}
-                              onValueChange={(value) => setPendingExcludedOriginalLanguage(value === NONE_VALUE ? '' : value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={NONE_VALUE}>Select language</SelectItem>
-                                {availableExcludedOriginalLanguages.map(languageItem => (
-                                  <SelectItem key={languageItem.iso_639_1} value={languageItem.iso_639_1}>
-                                    {(languageItem.english_name || languageItem.name || languageItem.iso_639_1)} ({languageItem.iso_639_1})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleAddExcludedOriginalLanguage}
-                              disabled={!pendingExcludedOriginalLanguage}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                          {excludedOriginalLanguages.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {excludedOriginalLanguages.map(code => (
-                                <Badge key={code} variant="secondary" className="gap-1 pl-2 pr-1 py-1">
-                                  <span className="max-w-[180px] truncate">{getLanguageLabel(code)}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setExcludedOriginalLanguages(prev => prev.filter(item => item !== code))}
-                                    className="rounded-sm p-0.5 hover:bg-background/50"
-                                    aria-label={`Remove ${getLanguageLabel(code)}`}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">No original languages excluded.</p>
-                          )}
                         </div>
                       )}
                       <div className="space-y-2">

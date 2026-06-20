@@ -2196,7 +2196,7 @@ addon.get("/api/mdblist/external/lists/user", async (req, res) => {
 // ── TMDB Discover Preview ──
 addon.get("/api/tmdb/discover/preview", async (req, res) => {
   try {
-    const { type, ...queryParams } = req.query;
+    const { type, mode, timeWindow, ...queryParams } = req.query;
     const tmdbApiKey = await resolveTmdbDiscoverApiKey(req);
     if (!tmdbApiKey) {
       return res.status(400).json({ error: "TMDB API key is required" });
@@ -2204,27 +2204,35 @@ addon.get("/api/tmdb/discover/preview", async (req, res) => {
     const mediaType = normalizeTmdbDiscoverType(type);
     const config = { apiKeys: { tmdb: tmdbApiKey } };
 
-    // Pass through all query params except internal ones
-    const params = {};
-    const skipKeys = new Set(['type', 'apikey', 'userUUID', 'excludedOriginalLanguages']);
-    for (const [key, value] of Object.entries(queryParams)) {
-      if (!skipKeys.has(key) && value !== undefined && value !== '') {
-        params[key] = value;
-      }
-    }
     const excludedOriginalLanguages = normalizeOriginalLanguageCodes(
       typeof req.query?.excludedOriginalLanguages === 'string'
         ? req.query.excludedOriginalLanguages.split(',')
         : req.query?.excludedOriginalLanguages
     );
-    const resolvedParams = resolveDynamicTmdbDiscoverParams(params, {
-      timezone: typeof req.query?.timezone === 'string' ? req.query.timezone : undefined
-    });
-    resolvedParams.page = 1;
 
-    const response = mediaType === 'movie'
-      ? await moviedb.discoverMovie(resolvedParams, config)
-      : await moviedb.discoverTv(resolvedParams, config);
+    let response;
+    if (mode === 'trending') {
+      const tmdbMediaType = mediaType === 'movie' ? 'movie' : 'tv';
+      const tw = timeWindow === 'week' ? 'week' : 'day';
+      response = await moviedb.trending({ media_type: tmdbMediaType, time_window: tw, page: 1 }, config);
+    } else {
+      // Pass through all query params except internal ones
+      const params = {};
+      const skipKeys = new Set(['type', 'apikey', 'userUUID', 'excludedOriginalLanguages', 'mode', 'timeWindow']);
+      for (const [key, value] of Object.entries(queryParams)) {
+        if (!skipKeys.has(key) && value !== undefined && value !== '') {
+          params[key] = value;
+        }
+      }
+      const resolvedParams = resolveDynamicTmdbDiscoverParams(params, {
+        timezone: typeof req.query?.timezone === 'string' ? req.query.timezone : undefined
+      });
+      resolvedParams.page = 1;
+
+      response = mediaType === 'movie'
+        ? await moviedb.discoverMovie(resolvedParams, config)
+        : await moviedb.discoverTv(resolvedParams, config);
+    }
 
     const filteredResults = filterByExcludedOriginalLanguages(response?.results || [], excludedOriginalLanguages);
 
