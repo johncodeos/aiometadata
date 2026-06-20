@@ -2196,7 +2196,7 @@ addon.get("/api/mdblist/external/lists/user", async (req, res) => {
 // ── TMDB Discover Preview ──
 addon.get("/api/tmdb/discover/preview", async (req, res) => {
   try {
-    const { type, mode, timeWindow, ...queryParams } = req.query;
+    const { type, mode, timeWindow, releasedOnly, ...queryParams } = req.query;
     const tmdbApiKey = await resolveTmdbDiscoverApiKey(req);
     if (!tmdbApiKey) {
       return res.status(400).json({ error: "TMDB API key is required" });
@@ -2215,6 +2215,19 @@ addon.get("/api/tmdb/discover/preview", async (req, res) => {
       const tmdbMediaType = mediaType === 'movie' ? 'movie' : 'tv';
       const tw = timeWindow === 'week' ? 'week' : 'day';
       response = await moviedb.trending({ media_type: tmdbMediaType, time_window: tw, page: 1 }, config);
+
+      // Filter unreleased items if releasedOnly is enabled
+      if (releasedOnly === 'true' || releasedOnly === '1') {
+        const today = new Date().toISOString().split('T')[0];
+        const dateField = mediaType === 'movie' ? 'release_date' : 'first_air_date';
+        if (response?.results) {
+          response.results = response.results.filter(item => {
+            const date = item[dateField];
+            return date && date <= today;
+          });
+          response.total_results = response.results.length;
+        }
+      }
     } else {
       // Pass through all query params except internal ones
       const params = {};

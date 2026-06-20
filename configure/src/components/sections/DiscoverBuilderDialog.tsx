@@ -2006,6 +2006,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
         if (tmdbCatalogMode === 'trending') {
           queryParams.set('mode', 'trending');
           queryParams.set('timeWindow', trendingTimeWindow);
+          if (releasedOnly) queryParams.set('releasedOnly', 'true');
         } else {
           for (const [key, value] of Object.entries(params)) {
             queryParams.set(key, String(value));
@@ -2742,6 +2743,7 @@ export function DiscoverBuilderDialog({ isOpen, onClose, editingCatalog, customi
             ...(discoverSource === 'tmdb' && tmdbCatalogMode === 'trending' && {
               mode: 'trending',
               timeWindow: trendingTimeWindow,
+              releasedOnly,
             }),
             ...(discoverSource === 'tmdb' && (() => {
               const excludeLangs = Object.entries(languageRoles)

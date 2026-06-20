@@ -985,13 +985,29 @@ async function getTmdbAndMdbListCatalog(type: string, id: string, genre: string,
           discoverMetadata?.excludedOriginalLanguages
         );
 
-        if (filteredResults.length === 0) {
-          logger.info(`[TMDB Trending Discover] No results for ${id} after original language exclusions`);
+        // Filter unreleased items if releasedOnly is enabled
+        const releasedOnly = discoverMetadata.releasedOnly || discoverMetadata.formState?.releasedOnly;
+        let dateFilteredResults = filteredResults;
+        if (releasedOnly) {
+          const today = new Date().toISOString().split('T')[0];
+          const dateField = isMovieCatalog ? 'release_date' : 'first_air_date';
+          const beforeCount = filteredResults.length;
+          dateFilteredResults = filteredResults.filter((item: any) => {
+            const date = item[dateField];
+            return date && date <= today;
+          });
+          if (beforeCount !== dateFilteredResults.length) {
+            logger.info(`[TMDB Trending Discover] releasedOnly filter removed ${beforeCount - dateFilteredResults.length} unreleased items`);
+          }
+        }
+
+        if (dateFilteredResults.length === 0) {
+          logger.info(`[TMDB Trending Discover] No results for ${id} after filtering`);
           return [];
         }
 
         const metaType = isMovieCatalog ? 'movie' : 'series';
-        const metas = await mapWithLimit(filteredResults, async (item: any) => {
+        const metas = await mapWithLimit(dateFilteredResults, async (item: any) => {
           const stremioId = `tmdb:${item.id}`;
           try {
             const result = await cacheWrapMetaSmart(userUUID, stremioId, async () => {

@@ -1,0 +1,44 @@
+<h2>Language Filter UX — 3 Approaches</h2>
+<p class="subtitle">Which direction feels right for fixing the include/exclude confusion?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Unified List with Role Toggle</h3>
+      <p>One searchable list. Each language gets a 3-state toggle: <strong>Off → Include (green) → Exclude (red)</strong>. Clear visual distinction, no separate sections. Badges below are color-coded green/red. Search bar at top for quick filtering.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Single section — no confusion about which list is which</li><li>Clear visual hierarchy: green = include, red = exclude</li><li>Search solves the 100+ language scrolling problem</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Redesigns the current section layout</li><li>Toggle per language is slightly more clicks for bulk adds</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Keep Sections, Add Color + Search</h4>
+      <p>Keep the two separate sections but: <strong>color-code badges</strong> (green for include, red for exclude), add a <strong>search bar</strong> inside each dropdown, and show a <strong>toast warning</strong> when adding to one side removes from the other.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Minimal structural change — low risk</li><li>Color distinction makes include vs exclude obvious</li><li>Search helps find languages fast</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Still two sections — takes more vertical space</li><li>Mutual exclusion still silent (just warned via toast)</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Chip Grid with Color States</h3>
+      <p>All available languages shown as <strong>clickable badge chips</strong> in a scrollable grid. Click to cycle: <strong>Default → Include (green) → Exclude (red) → Default</strong>. Search bar at top to filter the grid. No dropdown, no "Add" button — everything visible at a glance.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Everything visible at once — fastest interaction</li><li>Color states make include/exclude instantly clear</li><li>Search + visual = best of both worlds</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>100+ chips can look dense (mitigated by search)</li><li>Biggest UI change from current pattern</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top: 1.5rem; color: var(--muted-foreground); font-size: 0.875rem;">
+  Click to select your preferred direction, then tell me in the terminal which one you like.
+</p>
