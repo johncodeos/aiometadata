@@ -4905,6 +4905,11 @@ addon.get("/rating", (req, res) => {
   res.redirect(`/stremio/${user}/rating?${params.toString()}`);
 });
 
+addon.get('/robots.txt', (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.send('User-agent: *\nDisallow: /\n');
+});
+
 addon.use(favicon(path.join(publicDir, 'favicon.png')));
 addon.use('/configure', express.static(clientDistDir));
 addon.use(express.static(publicDir));
